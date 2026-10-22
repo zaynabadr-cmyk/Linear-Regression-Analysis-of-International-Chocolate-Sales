@@ -33,10 +33,5 @@ The data cover only January-August in 2024, only one numeric predictor is availa
 - `Final_Project.pdf`: final report
 - `Final_Project.Rmd`: R Markdown source
 
-## How to Reproduce
-1. Download `chocolate.csv` from Kaggle into the repo folder
-2. Install packages: `install.packages(c("ggplot2", "car", "dplyr"))`
-3. Open the Rmd in RStudio and click **Knit**
-
 ## Author
 Zayna Badr, University of Washington
