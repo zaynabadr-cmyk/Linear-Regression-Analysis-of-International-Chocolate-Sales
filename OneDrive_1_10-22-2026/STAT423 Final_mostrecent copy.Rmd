@@ -1,0 +1,917 @@
+---
+title: "\\textbf{Final Project Report:}"
+subtitle: "\\textbf{Chocolate Regression}"
+author: "Fiona Vo, Srinidhi Muralidharan, Zayna Badr" 
+output:
+  pdf_document: default
+  html_document:
+  number_sections: true
+  word_document: default
+---
+
+```{r setup, include=FALSE}
+#Use this code chunk to include libraries, and set global options.
+library(ggplot2)
+library(car)
+library(dplyr)
+```
+
+\begin{center}
+\textbf{Abstract}
+\end{center}
+
+\begin{center}
+ABSTRACT PARAGRAGRAPH GOES HERE!!
+\end{center}
+
+\section{1 Introduction} 
+
+Understanding what affects product sales is important for businesses. It can help them improve their marketing, allow them to manage inventory better, and help them figure out which products sell the most. In this analysis, we will analyze the different factors that affect recorded chocolate sales.
+
+To explore this, we will analyze a data set of global chocolate sale transactions from 2022 - 2024 to study what factors influence our response variable: the amount of money made from each sale. The main goal is to determine which variables are have the most significant impact on sales and propose the best regression model to explain and predict the chocolate revenue response variable.
+
+In this study, we aim to investigate the following key questions:
+
+1. What is the best model of chocolate sales, sales, country, year, boxes shipped?
+
+2. Which predictors have the most impact on sales?
+
+3. How well are we able to predict sales using these variables?
+
+\section{2 Data Description and Exploratory Data Analysis (EDA)}
+
+This data set was accessed through Kaggle and contains global chocolate sales transactions collected from 2022 to 2024. It consists of $n = 3013$ observations and 5 columns/variables. Each observation represents a single chocolate sales transaction. The data set includes both quantitative and categorical variables related to each sale.
+
+\subsection{2.1 Variables}
+
+Let $Y$ denote the Response Variable representing chocolate sales:
+
+\begin{itemize}
+    \item $Y$: sqrt\_Amount – The square root transformation of sales amount (in USD) for eahc transaction
+\end{itemize}
+
+The primary predictors are:
+
+\begin{itemize}
+    \item $X_1$: Product – The type of chocolate product sold in the transaction (e.g., dark chocolate bites, caramel chocolates, eclairs).
+    \item $X_2$: Country – The country where the sale occurred, representing the geographic market of the transaction.
+    \item $X_3$: Year – The year in which the transaction occurred, derived from the Date variable to study changes in sales over time.
+    \item $X_4$: Boxes Shipped – The number of chocolate boxes sold in the transaction.
+\end{itemize}
+
+\subsection{2.2 Data Cleaning}
+
+Our first step was to make the `Amount` and `Date` columns numerical. Next, we plotted the distribution of `Amount`:
+
+```{r, include = FALSE}
+chocolate <- read.csv("chocolate.csv")
+head(chocolate)
+```
+
+```{r, include = FALSE}
+#Transform "Amount" (using gsub)
+chocolate$Amount <- as.numeric(gsub("[$,]", "", chocolate$Amount))
+#Making Year category
+chocolate$Year <- substring(chocolate$Date,7,10)
+head(chocolate)
+```
+
+```{r, echo=FALSE, fig.show='hold', out.width='49%'}
+
+#Histogram of Sales
+
+hist(chocolate$Amount, col = "chocolate4",
+     main = "Distribution of Sales Amount",
+     xlab = "Sales in Dollars", xlim = c(0,30000))
+
+#Box plot of Sales
+
+boxplot(chocolate$Amount,
+        main = "Boxplot of Sales Amount", 
+        ylab = "Dollars in Sales",
+        col = "chocolate4")
+
+```
+
+The Distribution of `Amount` was originally right skewed. To remedy this, we attempted to transform this response variable. Our first attempt was to take the log, but as is shown below, this only made the distribution left skewed. Our next attempt was to take the square root of Amount, which yielded positive results as shown below:
+
+```{r, echo = FALSE, fig.show='hold', out.width='49%'}
+
+ #Log Transformation of Sales
+
+chocolate$Log_Amount <- log(chocolate$Amount)
+
+#Histogram of Log Sales
+
+hist(chocolate$Log_Amount, col = "chocolate4",
+     main = "Distribution of Log Amount in Sales",
+     xlab = "Log Dollars in Sales")
+
+ #Square Root Transformation of Sales
+
+chocolate$sqrt_Amount <- sqrt(chocolate$Amount)
+
+#Histogram of Log Sales
+
+hist(chocolate$sqrt_Amount, col = "chocolate4",
+     main = "Distribution of Sqrt Amount in Sales",
+     xlab = "Sqrt Dollars in Sales")
+
+
+#Box plot of sqrt of Sales
+
+
+boxplot(chocolate$sqrt_Amount,
+        main = "Boxplot of Sqrt Sales Amount", 
+        ylab = "Sqrt Dollars in Sales",
+        col = "chocolate4")
+
+
+```
+
+The skew of the distribution of the response variable can impact the distribution of the residuals, which need to be normally distributed to satisfy model assumptions. After square rooting the response, it became Normally distributed, which is our ideal result.
+
+##TODO see if there's neg values after sqrt!!
+
+\subsection{2.3 Data Exploration}
+
+**These are some questions we hoped to answer through our data exploration:**
+
+1. Does average sales Amount differ by year?
+
+2. How do chocolate sales vary by country? 
+
+3. Why is there no correlation between `Boxes.Shipped` and `Amount`? (This question came later after plotting the two variables against each other)
+
+```{r, echo= FALSE}
+
+#Bar Plot of Average Chocolate sales in 2022, 2023, and 2024
+
+average_sales <- chocolate %>%
+  group_by(Year) %>%
+  summarise(average_sales = mean(Amount, na.rm = TRUE))
+
+#average_sales
+
+
+ggplot(average_sales, aes(x = factor(Year), y = average_sales)) +
+  geom_col(fill = "chocolate4", width = 0.6) +
+  labs(title = "Average Chocolate Sales by Year", 
+       x = "Year",
+       y = "Average Sales in Dollars")
+
+```
+
+Average chocolate sales show a steady increase over time. Sales rose from about $\$5652.308$ in 2022 to roughly $\$6366.151$ in 2024. This suggests consistent growth in chocolate sales over the three-year period.
+
+```{r, echo = FALSE}
+# Boxplot of Chocolate sales by year
+
+ggplot(chocolate, aes(x = factor(Year), y = Amount)) +
+  geom_boxplot(color = "chocolate4") +
+  labs(title = "Chocolate Sales by Year",
+       x = "Year",
+       y = "Sales in dollars")
+
+```
+
+The distribution of chocolate sales shifts slightly upward each year, indicating increasing typical sales values from 2022 - 2024. The spreads of the boxes are similar across years, suggesting variability remains relatively consistent. Several high-value outliers appear in all years, indicating occasional very large sales transactions.
+
+```{r, echo= FALSE}
+# Chocolate Sales Monthly
+
+chocolate_2024 <- chocolate %>%
+  filter(Year == 2024)
+
+#Making Month Category in 2024
+chocolate_2024$Month <- substring(chocolate_2024$Date, 4, 5)
+
+chocolate_2024$Month <- factor(chocolate_2024$Month,
+                              levels = c("01","02","03","04","05","06","07","08","09","10","11","12"),
+                              labels = c("Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"))
+
+# Average Sales of Chocolate by Month in 2024
+
+average_sales_2024 <- chocolate_2024 %>%
+  group_by(Month) %>%
+  summarise(average_sales_2024 = mean(Amount, na.rm = TRUE))
+#average_sales_2024
+
+#Bar Plot of Monthly Chocolate Sales in 2024
+
+ggplot(average_sales_2024, aes(x = Month, y = average_sales_2024)) +
+  geom_col(fill = "chocolate4", width = 0.6) +
+  labs(title = "Average Chocolate Sales by Month in 2024", 
+       x = "Month",
+       y = "Average Monthly Chocolate Sales in Dollars")
+
+```
+
+Average monthly sales in 2024 are relatively stable but show some variation. February has the highest average sales, likely reflecting seasonal demand such as Valentine’s Day (love is in the air)!!!! Sales dip slightly around June and July before increasing again toward August.
+
+How do Chocolate Sales differ by these Countries:
+
+```{r, echo= FALSE}
+
+# Countries in Data set
+unique(chocolate$Country)
+
+
+# Average Country Sales
+average_country_sales <- chocolate %>%
+  group_by(Country) %>%
+  summarise(average_country_sales = mean(Amount, na.rm = TRUE)) %>%
+  arrange(desc(average_country_sales))
+  
+
+#average_country_sales
+
+# Box Plot for Country vs Chocolate Sales
+
+ggplot(chocolate, aes(x = Country, y = Amount)) +
+  geom_boxplot(color = "chocolate4") +
+  labs(title = "Distribution of Chocolate Sales by Country", 
+       x = "Countries",
+       y = "Chocolate Sales in Dollars")
+
+```
+
+Sales distributions vary across countries but have similar spreads and medians. The UK, USA, and Australia tend to have slightly higher median sales compared to other countries. India also has higher upper outliers, suggesting some very large transactions occur there.
+
+```{r, echo= FALSE}
+# Bar chart of Average Sales by country
+
+ggplot(average_country_sales, aes(x = reorder(Country, average_country_sales), y = average_country_sales)) +
+  geom_col(fill = "chocolate4", width = 0.5) +
+  labs(title = "Average Chocolate Sales by Country",
+       x = "Country",
+       y = "Average Sales ($)") +
+  theme_minimal()
+
+```
+
+Average sales differ moderately between countries. The UK has the highest average sales, followed by the USA and India. Canada and New Zealand show slightly lower averages, indicating relatively smaller average sales compared to others
+
+```{r, echo= FALSE}
+
+ggplot(average_country_sales, aes(x = Country, y = average_country_sales, size = average_country_sales)) +
+  scale_size(range = c(10, 19)) +
+  geom_point(color = "chocolate4", alpha = 0.7) +
+  scale_color_gradient(low = "chocolate4", high = "chocolate4") +
+  labs(title = "Average Chocolate Sales by Country",
+       x = "Country",
+       y = "Average Sales ($)",
+       size = "Average Sales ($)") +
+  theme_minimal()
+
+```
+
+The UK stands out with the highest average sales, represented by the largest bubble, while Canada and New Zealand have smaller bubbles indicating lower averages.
+
+Most popular chocolates by country:
+
+```{r, echo= FALSE}
+
+num <- length(unique(chocolate$Product))
+#num
+# Average Product Sales
+average_product <- chocolate %>%
+  group_by(Product) %>%
+  summarise(average_product = mean(Amount, na.rm = TRUE)) %>%
+  arrange(desc(average_product))
+
+#average_product
+
+
+ggplot(average_product, aes(x = reorder(Product, average_product), y = average_product)) +
+  geom_col(fill = "chocolate4") +
+  coord_flip() +
+  labs(title = "Average Chocolate Sales by Product",
+       x = "Chocolate Type",
+       y = "Average Sales ($)") +
+  theme_minimal()
+
+
+```
+
+Average sales vary considerably across chocolate products. Peanut Butter Cubes have the highest average sales, while Drinking Coco has the lowest.
+
+```{r}
+
+# Top 5 Most popular Products
+top_5 <- chocolate %>%
+  group_by(Product) %>%
+  summarise(top_5 = sum(Amount, na.rm = TRUE)) %>%
+  arrange(desc(top_5)) %>%
+  head(5)
+
+top_5
+
+#Number of Boxes shipped for each product, Notice head(5) though
+
+total_boxes <- chocolate %>%
+  group_by(Product) %>%
+  summarise(total_boxes = sum(Boxes.Shipped, na.rm = TRUE)) %>%
+  arrange(desc(total_boxes)) %>%
+  head(5)
+
+total_boxes
+
+```
+
+Smooth Sliky Salty has the highest total sales, followed closely by 50% Dark Bites and White Choc. 
+
+50% Dark Bites has the highest number of boxes shipped, followed by Smooth Sliky Salty and Eclairs. Note, while some products appear in both the highest sales and highest shipment lists, others ship many boxes but may have lower total revenue, meaning differences in pricing or product value.
+
+
+Which product is most popular in each country?
+
+##TODO? Which product is most popular in each country?
+
+Relationship between Boxes shipped and Chocolate Sales
+
+```{r, echo = FALSE, message = FALSE}
+##Do we need this?
+
+#Scatterplot of Boxes Shipped and Sales
+ggplot(data = chocolate, aes(x = Boxes.Shipped, y = Amount)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE) +
+  labs(title = "Scatterplot of Boxes Shipped and Sales",
+       x = "Boxes Shipped",
+       y = "Sales Amount")
+
+
+#Sqrt of Sales and Boxes Shipped
+ggplot(data = chocolate, aes(x = Boxes.Shipped, y = sqrt_Amount)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE) +
+  labs(title = "Scatterplot of Boxes Shipped and Square Root of Sales",
+       x = "Boxes Shipped",
+       y = "Sqrt of Sales")
+```
+Strangely, there is no clear correlation between Boxes.Shipped and Amount for each order (with or without transformation). This is a confusing result, since theoretically the more boxes being bought, the greater the sales quantity will be for a transaction.
+
+A key observation here is that each transaction only accounts for one product type of chocolate. If someone ordered more than one product type of chocolate, they would be recorded in the data set as two separate transactions on the same date. To better understand the variation in `price_per_box` for each product and/or country, we created a new variable `price_per_box`:
+
+```{r, echo = FALSE}
+chocolate$price_per_box <- chocolate$Amount / chocolate$Boxes.Shipped
+
+# Table of countries and observations
+countries_obs <- chocolate %>%
+  group_by(Country) %>%
+  summarise(observations = n(),
+            avg_price = mean(price_per_box, na.rm = TRUE)) %>%
+  arrange(desc(avg_price))
+
+countries_obs
+```
+
+Canada has the highest average price per box, followed by the USA and New Zealand. In contrast, the UK and India show lower average prices, suggesting chocolate products may be sold at lower prices in those markets. The number of observations across countries is relatively similar, indicating the data set is reasonably balanced across the included geographic regions.
+
+```{r}
+# Table of product and price_per_box
+product_prices <- chocolate %>%
+  group_by(Product) %>%
+  summarise(observations = n(),
+            avg_price = mean(price_per_box, na.rm = TRUE)) %>%
+  arrange(desc(avg_price))
+
+product_prices
+```
+
+Looking at this table confirms our previous suspicions. The most expensive chocolate product is a box of white chocolate at about \$246.49, with the least expensive being the 70\% dark bites at a price of about \$61.33. If one transaction represented a purchase of 15 boxes of white chocolate, and another transaction represented a purchase of 30 boxes of 70\% dark bites, the first purchase would still have a larger sales amount. This may indicate the reasoning for the lack of correlation between `Boxes.Shipped` and `Amount`.
+
+Check if price per box is a determiner for sales: 
+
+```{r, echo = FALSE, message = FALSE}
+ggplot(data = chocolate, aes(x = log(price_per_box), y = log(Amount))) +
+  geom_point()  +
+  geom_smooth(method = "lm", se = FALSE) + 
+  labs(title = "Scatterplot of price per box and sales amt ",
+       x = "log(price per box)",
+       y = "log(amount)")
+
+cor(log(chocolate$Amount), log(chocolate$price_per_box))
+```
+
+After taking the log of both variables, we are able to observe a linear correlation between Amount and `price_per_box`. The correlation value for these two variables is approximately 0.7414.
+
+\section{3 Methodology and Model Building}
+
+\subsection{3.1 Single Predictor Models}
+
+$$
+\sqrt{Amount} \sim \text{Boxes.Shipped} 
+$$
+
+```{r, echo = FALSE}
+model_boxes <- lm(sqrt_Amount ~ Boxes.Shipped, data = chocolate)
+
+summary(model_boxes)
+```
+`Boxes.Shipped` does not appear to have significant impact on the response as a singular predictor.
+
+$$
+\sqrt{Amount} \sim \text{Country} 
+$$
+```{r, echo = FALSE}
+model_country <- lm(sqrt_Amount ~ Country, data = chocolate)
+
+summary(model_country)
+```
+
+`Country` does not appear to have significant impact on the response as a singular predictor.
+
+$$
+\sqrt{Amount} \sim \text{Product} 
+$$
+```{r, echo = FALSE}
+model_product <- lm(sqrt_Amount ~ Product, data = chocolate)
+
+summary(model_product)
+```
+
+`Product` appears to have some significant impact on the response as a singular predictor.
+
+$$
+\sqrt{Amount} \sim \text{Year} 
+$$
+```{r, echo = FALSE}
+model_year <- lm(sqrt_Amount ~ Year, data = chocolate)
+
+summary(model_year)
+```
+
+`Year` appears to have a significant impact on the response as a singular predictor.
+
+
+$$
+\sqrt{\text{Amount}} \sim \text{price_per_box}
+$$
+
+
+```{r, echo = FALSE}
+model_price_per <- lm(sqrt_Amount ~ price_per_box, data = chocolate)
+summary(model_price_per)
+```
+
+`price_per_box` appears to have a significant impact on the response as a singular predictor.
+
+\subsection{3.2 Stepwise Selection}
+
+Backwards: 
+
+```{r, echo = FALSE, include = FALSE}
+full_model <- lm(sqrt_Amount ~ Boxes.Shipped + price_per_box + Product + Year + Country, 
+                 data = chocolate)
+backward_model <- step(full_model, dir = "backward")
+```
+
+```{r, echo = FALSE}
+print(backward_model)
+```
+
+Forwards:
+
+```{r, echo = FALSE, include = FALSE}
+empty_model <- lm(sqrt_Amount ~ 1, data = chocolate)
+
+# empty model
+forward <- step(empty_model, dir = "forward", scope = list(upper=full_model, lower=empty_model))
+```
+
+```{r, echo = FALSE}
+print(forward)
+```
+
+Both: 
+
+```{r, echo = FALSE, include = FALSE}
+both <- step(full_model, dir = "both")
+```
+
+```{r, echo = FALSE}
+print(both)
+```
+
+Based off these results we know that best model according to Stepwise Selection is:
+
+$$
+\sqrt{Amount} \sim \text{Boxes.Shipped} + \text{price_per_box} + \text{Year}
+$$
+
+We will call this our Stepwise model.
+
+```{r, echo = FALSE}
+step_model = lm(sqrt_Amount ~ Boxes.Shipped + price_per_box + Year, data = chocolate)
+summary(step_model)
+```
+
+
+\subsection{3.3 Multiple Predictor Models}
+
+**Full model with no Interaction Variables**
+$$
+\sqrt{Amount} \sim \text{Boxes.Shipped} + \text{price_per_box} + \text{Product} + \text{Year} + \text{Country}  
+$$
+
+
+```{r, echo = FALSE}
+full <- lm(sqrt_Amount ~ Boxes.Shipped + price_per_box + Product + Year + Country, data = chocolate)
+summary(full)
+```
+
+**Stepwise model with Interaction Variable 1**
+
+$$
+\sqrt{Amount} \sim \text{Boxes.Shipped} + \text{Year} + \text{price_per_box} + \text{Boxes.Shipped:price_per_box}
+$$
+
+```{r, echo = FALSE}
+int1_step_model <- lm(sqrt_Amount ~ Boxes.Shipped + price_per_box + Year + Boxes.Shipped:price_per_box,
+                      data = chocolate)
+# summary(int1_step_model)
+```
+
+```{r, echo = FALSE}
+anova(step_model, int1_step_model)
+```
+Including this first interaction term increases the R^2 adjusted and indicates (based on the p-value) that the predictors are more significant in predicting the response variable. The anova table confirms these results, showing a very low p-value (observed results are highly unlikely under the null hypothesis) when compared with the original step model.
+
+**Stepwise model with Interaction Variable 2**
+
+$$
+\sqrt{Amount} \sim \text{Boxes.Shipped} + \text{price_per_box} + \text{Year} + \text{Boxes.Shipped:Year}
+$$
+
+```{r, echo = FALSE}
+int2_step_model <- lm(sqrt_Amount ~ Year + Boxes.Shipped + price_per_box + Boxes.Shipped:Year, 
+                      data = chocolate)
+# summary(int2_step_model)
+```
+
+```{r, echo = FALSE}
+anova(step_model, int2_step_model)
+```
+Including this interaction term does not appear to improve the percenatge of variance explained by the model significantly, as is shown by the anova table p-value result.
+
+**Stepwise model with Interaction Variable 3**
+
+$$
+\sqrt{Amount} \sim \text{Boxes.Shipped} + \text{price_per_box} + \text{Year} + \text{Boxes.Shipped:Country}
+$$
+
+
+```{r, echo = FALSE}
+int3_step_model <- lm(sqrt_Amount ~ Year + Boxes.Shipped + price_per_box + Boxes.Shipped:Country, 
+                      data = chocolate)
+# summary(int3_full_model)
+```
+
+```{r, echo = FALSE}
+anova(step_model, int3_step_model)
+```
+ANOVA test result p-value shows observable effect, although not as significant as `Boxes.Shipped:price_per_box`
+
+**Stepwise model with Interaction Variable 4**
+
+$$
+\sqrt{Amount} \sim \text{Boxes.Shipped} + \text{price_per_box} + \text{Year} + \text{Boxes.Shipped:Product}
+$$
+
+```{r, echo = FALSE}
+int4_step_model <- lm(sqrt_Amount ~ Year + Boxes.Shipped + price_per_box + Boxes.Shipped:Product,
+                      data = chocolate)
+#summary(int4_full_model)
+```
+
+```{r, echo = FALSE}
+anova(step_model, int4_step_model)
+```
+The p-value of the ANOVA test indicates this interaction term does not add any significance in our model's ability to predict the response variable.
+
+
+**Stepwise model with Interaction Variable 5**
+
+$$
+\sqrt{Amount} \sim \text{Boxes.Shipped} + \text{price_per_box} + \text{Year} + \text{price_per_box:Year}
+$$
+
+
+```{r, echo = FALSE}
+int5_step_model <- lm(sqrt_Amount ~ Boxes.Shipped + price_per_box + Year + price_per_box:Year,
+                      data = chocolate)
+#summary(int5_full_model)
+```
+
+```{r, echo = FALSE}
+anova(step_model, int5_step_model)
+```
+The p-value of the ANOVA test again indicates no significant impact of the interaction term on the response variable or the ability of the model to predict it.
+
+**Stepwise model with Interaction Variable 6**
+
+$$
+\sqrt{Amount} \sim \text{Boxes.Shipped} + \text{price_per_box} + \text{Year} + \text{price_per_box:Country}
+$$
+
+```{r, echo = FALSE}
+
+int6_step_model <- lm(sqrt_Amount ~ Boxes.Shipped + price_per_box + Year + price_per_box:Country,
+                      data = chocolate)
+
+#summary(int6_full_model)
+
+anova(step_model, int6_step_model)
+```
+The ANOVA test p-value indicates there is significant impact of the interaction term on the model.
+
+**Stepwise model with Interaction Variable 7**
+
+$$
+\sqrt{Amount} \sim \text{Boxes.Shipped} + \text{price_per_box} + \text{Year} + \text{price_per_box:Product}
+$$
+
+```{r, echo = FALSE}
+
+int7_step_model <- lm(sqrt_Amount ~ Boxes.Shipped + price_per_box + Year + price_per_box:Product,
+                      data = chocolate)
+
+#summary(int6_full_model)
+
+anova(step_model, int7_step_model)
+```
+
+The ANOVA test p-value indicates that this interaction term is also appears impactful on the model.
+
+**Stepwise model with Interaction Variable 8**
+
+$$
+\sqrt{Amount} \sim \text{Boxes.Shipped} + \text{price_per_box} + \text{Year} + \text{Year:Country}
+$$
+
+```{r, echo = FALSE}
+
+int8_step_model <- lm(sqrt_Amount ~ Boxes.Shipped + price_per_box + Year + Year:Country,
+                      data = chocolate)
+
+#summary(int6_full_model)
+
+anova(step_model, int8_step_model)
+```
+The ANOVA test p-value indicates that this interaction term has no positive impact on the model.
+
+**Stepwise model with Interaction Variable 9**
+
+$$
+\sqrt{Amount} \sim \text{Boxes.Shipped} + \text{price_per_box} + \text{Year} + \text{Year:Product}
+$$
+
+```{r, echo = FALSE}
+
+int9_step_model <- lm(sqrt_Amount ~ Boxes.Shipped + price_per_box + Year + Year:Product,
+                      data = chocolate)
+
+#summary(int6_full_model)
+
+anova(step_model, int9_step_model)
+```
+Finally, this interaction term also does not appear to have significant positive impact on the model.
+
+**Proposing a Final Model:**
+
+Based on which interaction terms were significant, we propose a tentative final model of the stepwise model with the significant interaction terms:
+
+$$
+\begin{aligned}
+\sqrt{Amount} \sim\;& \text{Boxes.Shipped } + \text{ price_per_box} + \text{ Year} + \\ &\text{Boxes.Shipped:price_per_box} + \text{ Boxes.Shipped:Country} + \text{ price_per_box:Country} + \\
+&\text{price_per_box:Product}
+\end{aligned}
+$$
+
+```{r, echo = FALSE}
+potential <- lm(sqrt_Amount ~ Boxes.Shipped + price_per_box + Year + Boxes.Shipped:price_per_box +
+                  Boxes.Shipped:Country + price_per_box:Country + price_per_box:Product,
+                data = chocolate)
+```
+
+We are not sure if including `Country:Boxes.Shipped` is a good choice since it was less significant than other terms. To ensure we are not making a mistake, we will test our proposed final model AIC, BIC, and Adjusted R^2 with `Country:Boxes.Shipped` and without:
+
+```{r, echo = FALSE}
+
+potential_noboxcountry <- lm(sqrt_Amount ~ Boxes.Shipped + price_per_box + Year +
+                             Boxes.Shipped:price_per_box + price_per_box:Country +
+                             price_per_box:Product,
+                             data = chocolate)
+
+maybe_final <- data.frame(
+  Model = c("Model Without Country:Boxes.Shipped", "Final Model"),
+  Adjusted_R2 = c(summary(potential_noboxcountry)$adj.r.squared, summary(potential)$adj.r.squared),
+  AIC = c(AIC(potential_noboxcountry), AIC(potential)),
+  BIC = c(BIC(potential_noboxcountry), BIC(potential))
+)
+
+maybe_final
+```
+
+The difference between the two models is not very big, but since the final model maximizes adjusted R^2 and minimizes AIC, we will choose this model. The BIC is minimized for the model without the extra interaction, but we also know that BIC tends to be bias towards simpler models.
+
+Our proposed model is now our final model!
+
+$$
+\begin{aligned}
+\sqrt{Amount} \sim\;& \text{Boxes.Shipped } + \text{ price_per_box} + \text{ Year} + \\ &\text{Boxes.Shipped:price_per_box} + \text{ Boxes.Shipped:Country} + \text{ price_per_box:Country} + \\
+&\text{price_per_box:Product}
+\end{aligned}
+$$
+
+```{r, echo = FALSE}
+FINAL_model <- lm(sqrt_Amount ~ Boxes.Shipped + price_per_box + Year + Boxes.Shipped:price_per_box +
+                  Boxes.Shipped:Country + price_per_box:Country + price_per_box:Product,
+                data = chocolate)
+
+summary(FINAL_model)
+```
+
+\section{4 Results and Diagnostics}
+
+Compare AIC and BIC for Stepwise Selected model and final model:
+```{r, echo = FALSE}
+model_stats <- data.frame(
+  Model = c("Stepwise Model", "Final Model"),
+  AIC = c(AIC(step_model), AIC(FINAL_model)),
+  BIC = c(BIC(step_model), BIC(FINAL_model))
+)
+
+model_stats
+```
+
+AIC and BIC are both minimized with the final model. This is a good sign and indicates that...
+
+Final Model is:
+$$
+\begin{aligned}
+\sqrt{Amount} \sim\;& \text{Boxes.Shipped } + \text{ price_per_box} + \text{ Year} + \\ &\text{Boxes.Shipped:price_per_box} + \text{ Boxes.Shipped:Country} + \text{ price_per_box:Country} + \\
+&\text{price_per_box:Product}
+\end{aligned}
+$$
+
+##TODO maybe apply final model to separate countries??
+
+\subsection{4.1 Model Summary}
+
+##TODO summarize the estimated coefficients for our FINAL MODEL!!
+
+\subsection{4.2 Model Diagnostics}
+
+Let's check that this model satisfies the assumptions:
+
+$$\epsilon_i \sim^{iid} Norm(0,\sigma^2)$$
+```{r, echo = FALSE, fig.show='hold', out.width='49%'}
+plot(FINAL_model, which=1, caption="", main="Residuals vs. Fitted")
+plot(FINAL_model, which=2, caption="", main="QQ Plot")
+```
+
+Residuals vs Fitted plot shows:
+
+1) no clear patterns, it is linear
+
+2) centered around 0, mean 0 assumption
+
+3) equal vertical spread across x-axis, constant variance 
+
+QQplot: 
+
+1) follows straight (linear) line, it is normally distributed
+
+**Check for Multicollinearity**
+
+VIF:
+
+```{r, echo = FALSE}
+vif(FINAL_model, type = "predictor")
+```
+Under the $GVIF^{(1/(2*Df))}$, we can tell that all VIF's are approximately 1, and even the largest value (1.57 for Boxes.Shipped) is well below common concern thresholds. The predictors in the model do not exhibit problematic multicollinearity.
+
+Since VIF is low, the relevance of the interaction terms is a result of country affecting the other variables. Would using interaction terms with country correct this, or is it better to perform separate linear models for each country? Let's see what does a better job.
+
+**Check for Outliers** 
+
+```{r, echo = FALSE}
+plot(FINAL_model, which = 4, ann= FALSE, sub = "")
+title(ylab = "Cook's Distance", main = NULL, xlab = "Index")
+```
+
+Most observations have very small Cook’s Distance values close to 0, which means removing them would not meaningfully change the regression model. But what if we were to remove it?
+
+```{r, echo = FALSE}
+FINAL_no_out <- lm(sqrt_Amount ~ Boxes.Shipped + price_per_box + Year +
+                     Boxes.Shipped:price_per_box + Boxes.Shipped:Country + price_per_box:Country + 
+                     price_per_box:Product, data = chocolate[c(-1161, -2255),])
+
+model_stats <- data.frame(
+  Model = c("New Final_no_outliers Model", "Original Final Model"),
+  AIC = c(AIC(FINAL_no_out), AIC(FINAL_model)),
+  BIC = c(BIC(FINAL_no_out), BIC(FINAL_model))
+)
+
+model_stats
+
+model_r_sq <- data.frame(
+  Model = c("New Final_no_outliers Model", "Original Final Model"),
+  Adjusted_R2 = c(summary(FINAL_no_out)$adj.r.squared,     summary(FINAL_model)$adj.r.squared)
+)
+model_r_sq
+
+```
+The Final Model without outliers have lower AIC and BIC, and higher Adjusted $R^2$
+
+\section{5 Discussion and Conclusion}
+
+##Summarize the main takeaways from your model in the context of the original problem.
+
+##What do the coefficients mean in the real world?
+
+##Acknowledge the limitations of your study (e.g., potential omitted variable bias, non-
+
+##representative sample) and suggest areas for future work.
+
+
+
+##Which predictor has the most impact on sales from our selected model?
+
+##How well are we able to predict sales using these variables?
+
+**US only full model**
+
+```{r, include = FALSE}
+choc_us <- chocolate %>%
+  filter(Country == "USA")
+
+modelus <- lm(sqrt_Amount ~ Product + Year + Boxes.Shipped, data = choc_us)
+
+summary(modelus)
+```
+
+**Australia only full model**
+
+```{r, include = FALSE}
+choc_aus <- chocolate %>%
+  filter(Country == "Australia")
+
+modelaus <- lm(sqrt_Amount ~ Product + Year + Boxes.Shipped, data = choc_aus)
+
+summary(modelaus)
+
+```
+
+**UK only full**
+
+```{r, include = FALSE}
+choc_uk <- chocolate %>%
+  filter(Country == "UK")
+
+model_uk <- lm(sqrt_Amount ~ Product + Year + Boxes.Shipped, data = choc_uk)
+
+summary(model_uk)
+```
+
+**India only**
+
+```{r, include = FALSE}
+choc_india <- chocolate %>%
+  filter(Country == "India")
+
+model_india <- lm(sqrt_Amount ~ Product + Year + Boxes.Shipped, data = choc_india)
+
+summary(model_india)
+```
+
+**New Zealand**
+
+```{r, include = FALSE}
+choc_nz <- chocolate %>%
+  filter(Country == "New Zealand")
+
+model_nz <- lm(sqrt_Amount ~ Product + Year + Boxes.Shipped, data = choc_nz)
+
+summary(model_nz)
+```
+
+**Canada**
+
+```{r, include = FALSE}
+choc_can <- chocolate %>%
+  filter(Country == "Canada")
+
+model_can <- lm(sqrt_Amount ~ Product + Year + Boxes.Shipped, data = choc_can)
+
+summary(model_can)
+```
+
+
+
+
+
+
