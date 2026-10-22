@@ -31,7 +31,7 @@ The data cover only January-August in 2024, only one numeric predictor is availa
 
 ## Files
 - `Final_Project.pdf`: final report
-- `Final_Project.Rmd`: R Markdown source
+- `STAT423 Final_mostrecent copy.Rmd`: R Markdown source
 
 ## Author
 Zayna Badr, University of Washington
